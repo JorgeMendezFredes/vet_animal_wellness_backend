@@ -211,6 +211,13 @@ def calculate_analytics(df: pd.DataFrame):
     top_20_clients_revenue = customer_stats.head(20)['facturado'].sum()
     total_revenue_2025 = df_2025['facturado'].sum()
     pareto_top_20_share = (top_20_clients_revenue / total_revenue_2025) * 100 if total_revenue_2025 > 0 else 0
+    
+    # Extract Top 20 clients details
+    top_20_clients_list = [{
+        "cliente": str(r['cliente']), 
+        "facturado": float(r['facturado']),
+        "tx_count": int(r['fecha_emision'])
+    } for _, r in customer_stats.head(20).iterrows()]
 
     # --- 8. Aging Analysis (Pending 2025) ---
     # Using 'today' as user reference or max numeric date
@@ -253,7 +260,8 @@ def calculate_analytics(df: pd.DataFrame):
         "customer_insights": {
             "total_clients_2025": int(total_clients_2025),
             "retention_rate_percentage": float(retention_rate),
-            "pareto_top_20_share_percentage": float(pareto_top_20_share)
+            "pareto_top_20_share_percentage": float(pareto_top_20_share),
+            "top_20_clients": top_20_clients_list
         },
         "aging_analysis_2025": aging_data,
         "data_quality": quality_metrics
