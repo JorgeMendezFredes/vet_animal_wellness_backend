@@ -109,11 +109,30 @@ def calculate_analytics(df: pd.DataFrame):
             "tx_2024": int(len(df_2024_ytd))
         }
 
-    # --- 3. Seasonality (Monthly) ---
-    monthly_stats = df_valid.groupby(['year', 'month'])['facturado'].sum().reset_index()
-    monthly_stats = monthly_stats.to_dict(orient='records')
-    # Convert int64 to int/float for JSON
-    monthly_stats = [{"year": int(r['year']), "month": int(r['month']), "facturado": float(r['facturado'])} for r in monthly_stats]
+    # --- 3. Granular Monthly KPIs ---
+    kpis_by_month = df_valid.groupby(['year', 'month']).agg({
+        'facturado': 'sum',
+        'pagado': 'sum',
+        'pendiente': 'sum',
+        'descuento': 'sum',
+        'fecha_emision': 'count'
+    }).reset_index().rename(columns={'fecha_emision': 'tx_count'})
+
+    # Calculate additional monthly metrics
+    kpis_by_month['ticket_prom'] = kpis_by_month['facturado'] / kpis_by_month['tx_count']
+    kpis_by_month = kpis_by_month.replace([np.inf, -np.inf], 0).fillna(0)
+    
+    kpis_by_month_list = []
+    for _, r in kpis_by_month.iterrows():
+        kpis_by_month_list.append({
+            "year": int(r['year']),
+            "month": int(r['month']),
+            "facturado": float(r['facturado']),
+            "pagado": float(r['pagado']),
+            "pendiente": float(r['pendiente']),
+            "tx_count": int(r['tx_count']),
+            "ticket_prom": float(r['ticket_prom'])
+        })
 
     # --- 4. Day of Week & Hours (2025 Analysis) ---
     df_2025 = df_valid[df_valid['year'] == 2025].copy()
@@ -226,7 +245,7 @@ def calculate_analytics(df: pd.DataFrame):
     return {
         "kpis_by_year": kpis_by_year,
         "ytd_comparison": ytd_comparison,
-        "monthly_seasonality": monthly_stats,
+        "monthly_seasonality": kpis_by_month_list,
         "dow_analysis_2025": dow_data,
         "top_hours_2025": top_hours,
         "payment_mix": payment_mix,
