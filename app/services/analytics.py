@@ -11,9 +11,30 @@ def calculate_analytics(df: pd.DataFrame):
 
     # --- Preprocessing ---
     # Convert numeric columns safely
+    # --- Preprocessing ---
+    # Convert numeric columns safely (handling various formats like "$1.000,00" or int)
     numeric_cols = ['facturado', 'pagado', 'pendiente', 'descuento']
+    
+    def clean_currency(val):
+        if pd.isna(val) or val == '':
+            return 0
+        if isinstance(val, (int, float)):
+            return val
+        s = str(val)
+        # Remove symbols and thousands separators
+        s = s.replace('$', '').replace(' ', '').replace('.', '')
+        # Replace decimal comma with dot
+        s = s.replace(',', '.')
+        try:
+            return float(s)
+        except ValueError:
+            return 0
+
     for col in numeric_cols:
-        df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+        if col in df.columns:
+            df[col] = df[col].apply(clean_currency)
+        else:
+            df[col] = 0
 
     # Convert date
     df['fecha_emision'] = pd.to_datetime(df['fecha_emision'], errors='coerce')
