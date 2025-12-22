@@ -6,3 +6,4 @@ supabase
 pydantic-settings
 gunicorn
 uvicorn[standard]
+openpyxl

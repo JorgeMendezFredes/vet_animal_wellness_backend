@@ -13,25 +13,15 @@ def get_dashboard_stats():
     
     # Fetch data (limiting to recent or all for now, depending on volume)
     # For now, let's just get a count and sum of 'facturado' to verify connection
-    response = supabase.table('comprobantes').select("facturado, pendiente, estado").execute()
+    response = supabase.table('comprobantes').select("*").execute()
     
     if not response.data:
         return {"message": "No data found"}
         
     df = pd.DataFrame(response.data)
     
-    total_facturado = float(df['facturado'].sum())
-    total_pendiente = float(df['pendiente'].sum())
-    count_comprobantes = int(len(df))
-    
-    # Simple grouping by status
-    status_counts = df['estado'].value_counts().to_dict()
-    # Convert keys and values to standard types if needed
-    status_counts = {k: int(v) for k, v in status_counts.items()}
+    # Calculate advanced analytics
+    from app.services.analytics import calculate_analytics
+    stats = calculate_analytics(df)
 
-    return {
-        "total_facturado": total_facturado,
-        "total_pendiente": total_pendiente,
-        "count_comprobantes": count_comprobantes,
-        "status_distribution": status_counts
-    }
+    return stats
