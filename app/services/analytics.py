@@ -46,58 +46,60 @@ def calculate_analytics(df: pd.DataFrame):
     # Filter out invalid dates if any
     df = df.dropna(subset=['fecha_emision'])
 
-    # --- 1. KPIs per Year (Excluding ANULADO) ---
-    df_valid = df[df['estado'] != 'ANULADO'].copy()
+    # --- 1. KPIs per Year, Status & Tipo ---
+    # Ensure columns exist
+    if 'estado' not in df.columns:
+        df['estado'] = 'VIGENTE'
     
+    # Identify if 'tipo' exists (e.g. Boleta, Factura)
+    has_tipo = 'tipo' in df.columns
+    group_dims_year = ['year', 'estado']
+    group_dims_month = ['year', 'month', 'estado']
+    if has_tipo:
+        group_dims_year.append('tipo')
+        group_dims_month.append('tipo')
+
     kpis_by_year = []
-    years = sorted(df['year'].unique())
-    
-    for y in years:
-        df_y = df_valid[df_valid['year'] == y]
-        df_y_all = df[df['year'] == y] # For cancellation rate
-        
-        tx_count = len(df_y)
-        facturado = df_y['facturado'].sum()
-        pagado = df_y['pagado'].sum()
-        pendiente = df_y['pendiente'].sum()
-        descuento = df_y['descuento'].sum()
-        
-        # Calculate rates
+    # Grouping by dimensions
+    yearly_stats = df.groupby(group_dims_year).agg({
+        'facturado': 'sum',
+        'pagado': 'sum',
+        'pendiente': 'sum',
+        'descuento': 'sum',
+        'fecha_emision': 'count'
+    }).reset_index()
+
+    for _, r in yearly_stats.iterrows():
+        tx_count = r['fecha_emision']
+        facturado = r['facturado']
+        descuento = r['descuento']
         gross = facturado + descuento
-        ticket_prom = facturado / tx_count if tx_count > 0 else 0
-        desc_rate = (descuento / gross) * 100 if gross > 0 else 0
         
-        anul_count = len(df_y_all[df_y_all['estado'] == 'ANULADO'])
-        total_count = len(df_y_all)
-        anul_rate = (anul_count / total_count) * 100 if total_count > 0 else 0
-        
-        kpis_by_year.append({
-            "year": int(y),
+        item = {
+            "year": int(r['year']),
+            "estado": str(r['estado']),
             "tx_count": int(tx_count),
             "facturado": float(facturado),
-            "pagado": float(pagado),
-            "pendiente": float(pendiente),
-            "ticket_prom": float(ticket_prom),
-            "desc_rate_percentage": float(desc_rate),
-            "anul_rate_percentage": float(anul_rate)
-        })
+            "pagado": float(r['pagado']),
+            "pendiente": float(r['pendiente']),
+            "ticket_prom": float(facturado / tx_count) if tx_count > 0 else 0,
+            "desc_rate_percentage": float((descuento / gross) * 100) if gross > 0 else 0,
+        }
+        if has_tipo:
+            item["tipo"] = str(r['tipo'])
+        kpis_by_year.append(item)
 
-    # --- 2. YTD Comparison (2024 vs 2025) ---
-    # Define "today" as the max date in dataset for fair comparison, or hardcode if requested.
-    # User said "21-dic". Let's use relative YTD based on the latest date in 2025.
-    
+    # --- 2. YTD Comparison (2024 vs 2025 - Still using valid data for direct benchmark) ---
+    df_valid = df[df['estado'] != 'ANULADO'].copy()
     max_date_2025 = df_valid[df_valid['year'] == 2025]['fecha_emision'].max()
     ytd_comparison = {}
     
     if pd.notnull(max_date_2025):
         day_of_year_limit = max_date_2025.dayofyear
-        
         df_2025_ytd = df_valid[(df_valid['year'] == 2025) & (df_valid['fecha_emision'].dt.dayofyear <= day_of_year_limit)]
         df_2024_ytd = df_valid[(df_valid['year'] == 2024) & (df_valid['fecha_emision'].dt.dayofyear <= day_of_year_limit)]
-        
         facturado_2025 = df_2025_ytd['facturado'].sum()
         facturado_2024 = df_2024_ytd['facturado'].sum()
-        
         growth_rate = ((facturado_2025 - facturado_2024) / facturado_2024) * 100 if facturado_2024 > 0 else 0
         
         ytd_comparison = {
@@ -109,30 +111,31 @@ def calculate_analytics(df: pd.DataFrame):
             "tx_2024": int(len(df_2024_ytd))
         }
 
-    # --- 3. Granular Monthly KPIs ---
-    kpis_by_month = df_valid.groupby(['year', 'month']).agg({
+    # --- 3. Granular Monthly KPIs (with status/tipo breakdown) ---
+    monthly_stats = df.groupby(group_dims_month).agg({
         'facturado': 'sum',
         'pagado': 'sum',
         'pendiente': 'sum',
         'descuento': 'sum',
         'fecha_emision': 'count'
-    }).reset_index().rename(columns={'fecha_emision': 'tx_count'})
+    }).reset_index()
 
-    # Calculate additional monthly metrics
-    kpis_by_month['ticket_prom'] = kpis_by_month['facturado'] / kpis_by_month['tx_count']
-    kpis_by_month = kpis_by_month.replace([np.inf, -np.inf], 0).fillna(0)
-    
     kpis_by_month_list = []
-    for _, r in kpis_by_month.iterrows():
-        kpis_by_month_list.append({
+    for _, r in monthly_stats.iterrows():
+        tx_count = r['fecha_emision']
+        item = {
             "year": int(r['year']),
             "month": int(r['month']),
+            "estado": str(r['estado']),
             "facturado": float(r['facturado']),
             "pagado": float(r['pagado']),
             "pendiente": float(r['pendiente']),
-            "tx_count": int(r['tx_count']),
-            "ticket_prom": float(r['ticket_prom'])
-        })
+            "tx_count": int(tx_count),
+            "ticket_prom": float(r['facturado'] / tx_count) if tx_count > 0 else 0
+        }
+        if has_tipo:
+            item["tipo"] = str(r['tipo'])
+        kpis_by_month_list.append(item)
 
     # --- 4. Day of Week & Hours (2025 Analysis) ---
     df_2025 = df_valid[df_valid['year'] == 2025].copy()

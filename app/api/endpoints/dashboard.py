@@ -34,6 +34,10 @@ def get_dashboard_stats():
         return {"message": "No data found"}
         
     df = pd.DataFrame(all_rows)
+    print("DEBUG - Columns in df:", df.columns.tolist())
+    if not df.empty:
+        print("DEBUG - Sample 'estado' values:", df['estado'].unique().tolist() if 'estado' in df.columns else "No 'estado' col")
+        print("DEBUG - Sample 'tipo' values:", df['tipo'].unique().tolist() if 'tipo' in df.columns else "No 'tipo' col")
     
     # Calculate advanced analytics
     from app.services.analytics import calculate_analytics
