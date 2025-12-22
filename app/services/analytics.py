@@ -146,46 +146,51 @@ def calculate_analytics(df: pd.DataFrame):
     }
     
     # 4a. DoW Stats for all available data in df_valid
-    dow_stats_all = df_valid.groupby('dow_idx').agg({
-        'facturado': 'sum',
-        'fecha_emision': ['count', lambda x: x.dt.date.nunique()]
-    }).reset_index()
-    dow_stats_all.columns = ['dow_idx', 'facturado', 'tx_count', 'count_active_days']
+    # Using named aggregation to avoid MultiIndex/duplicate name issues
+    dow_stats_all = df_valid.groupby('dow_idx').agg(
+        total_facturado=('facturado', 'sum'),
+        total_tx=('fecha_emision', 'count'),
+        count_active_days=('fecha_emision', lambda x: x.dt.date.nunique())
+    ).reset_index()
     
     dow_data_all = []
     for _, row in dow_stats_all.iterrows():
         dow_data_all.append({
             "day": dow_map.get(int(row['dow_idx']), "Unknown"),
-            "facturado": float(row['facturado']),
-            "tx_count": int(row['tx_count']),
-            "avg_daily_sales": float(row['facturado'] / row['count_active_days']) if row['count_active_days'] > 0 else 0
+            "facturado": float(row['total_facturado']),
+            "tx_count": int(row['total_tx']),
+            "avg_daily_sales": float(row['total_facturado'] / row['count_active_days']) if row['count_active_days'] > 0 else 0
         })
 
     # 4b. Heatmap (Day x Hour)
-    heatmap_stats = df_valid.groupby(['dow_idx', 'hour']).agg({
-        'facturado': 'sum',
-        'fecha_emision': 'count'
-    }).reset_index()
+    heatmap_stats = df_valid.groupby(['dow_idx', 'hour']).agg(
+        total_facturado=('facturado', 'sum'),
+        total_tx=('fecha_emision', 'count')
+    ).reset_index()
     
     demanda_heatmap = []
     for _, row in heatmap_stats.iterrows():
         demanda_heatmap.append({
             "day": dow_map.get(int(row['dow_idx'])),
             "hour": int(row['hour']),
-            "facturado": float(row['facturado']),
-            "tx_count": int(row['fecha_emision'])
+            "facturado": float(row['total_facturado']),
+            "tx_count": int(row['total_tx'])
         })
 
     # 4c. Daily Trends (for Rolling Average)
-    daily_stats = df_valid.groupby(df_valid['fecha_emision'].dt.date).agg({
-        'facturado': 'sum',
-        'fecha_emision': 'count'
-    }).reset_index()
-    daily_stats = daily_stats.rename(columns={'fecha_emision': 'tx_count', 'fecha_emision_dt': 'date'})
-    daily_stats.columns = ['date', 'facturado', 'tx_count']
-    daily_stats['date'] = daily_stats['date'].astype(str)
+    # Ensure date grouping name doesn't collide with existing columns
+    daily_stats = df_valid.groupby(df_valid['fecha_emision'].dt.date.rename('date_key')).agg(
+        total_facturado=('facturado', 'sum'),
+        total_tx=('fecha_emision', 'count')
+    ).reset_index()
     
-    daily_trends = daily_stats.to_dict(orient='records')
+    daily_trends = []
+    for _, row in daily_stats.iterrows():
+        daily_trends.append({
+            "date": str(row['date_key']),
+            "facturado": float(row['total_facturado']),
+            "tx_count": int(row['total_tx'])
+        })
 
     # --- 5. Payment Methods Mix ---
     # Assuming 'forma_pago_raw' needs simple categorization
@@ -197,7 +202,10 @@ def calculate_analytics(df: pd.DataFrame):
         if 'sin boleta' in p: return 'Sin Boleta'
         return 'Otros'
 
-    df_valid['payment_type'] = df_valid['forma_pago_raw'].apply(categorize_payment)
+    if 'forma_pago_raw' in df_valid.columns:
+        df_valid['payment_type'] = df_valid['forma_pago_raw'].apply(categorize_payment)
+    else:
+        df_valid['payment_type'] = 'Otros'
     
     payment_mix = []
     years = sorted(df_valid['year'].unique().tolist())
@@ -215,53 +223,76 @@ def calculate_analytics(df: pd.DataFrame):
 
     # --- 6. Top Debtors (2025) ---
     df_2025 = df_valid[df_valid['year'] == 2025].copy()
-    df_2025_pending = df_2025[df_2025['pendiente'] > 0].copy()
-    top_debtors = df_2025_pending.groupby('cliente')['pendiente'].sum().reset_index().sort_values('pendiente', ascending=False).head(5)
-    top_debtors_list = [{"cliente": str(r['cliente']), "pendiente": float(r['pendiente'])} for _, r in top_debtors.iterrows()]
+    top_debtors_list = []
+    if not df_2025.empty and 'cliente' in df_2025.columns:
+        df_2025_pending = df_2025[df_2025['pendiente'] > 0]
+        if not df_2025_pending.empty:
+            top_debtors = df_2025_pending.groupby('cliente')['pendiente'].sum().reset_index().sort_values('pendiente', ascending=False).head(5)
+            top_debtors_list = [{"cliente": str(r['cliente']), "pendiente": float(r['pendiente'])} for _, r in top_debtors.iterrows()]
 
     # --- 7. Customer Retention & Concentration (2025) ---
-    customer_stats = df_2025.groupby('cliente').agg({
-        'facturado': 'sum', 
-        'fecha_emision': 'count'
-    }).reset_index()
+    customer_insights = {
+        "total_clients_2025": 0,
+        "retention_rate_percentage": 0,
+        "pareto_top_20_share_percentage": 0,
+        "top_20_clients": []
+    }
     
-    total_clients_2025 = len(customer_stats)
-    returning_clients = len(customer_stats[customer_stats['fecha_emision'] > 1])
-    retention_rate = (returning_clients / total_clients_2025) * 100 if total_clients_2025 > 0 else 0
-    
-    # Pareto (Concentration)
-    customer_stats = customer_stats.sort_values('facturado', ascending=False)
-    top_20_clients_revenue = customer_stats.head(20)['facturado'].sum()
-    total_revenue_2025 = df_2025['facturado'].sum()
-    pareto_top_20_share = (top_20_clients_revenue / total_revenue_2025) * 100 if total_revenue_2025 > 0 else 0
-    
-    # Extract Top 20 clients details
-    top_20_clients_list = [{
-        "cliente": str(r['cliente']), 
-        "facturado": float(r['facturado']),
-        "tx_count": int(r['fecha_emision'])
-    } for _, r in customer_stats.head(20).iterrows()]
+    if not df_2025.empty and 'cliente' in df_2025.columns:
+        customer_stats = df_2025.groupby('cliente').agg({
+            'facturado': 'sum', 
+            'fecha_emision': 'count'
+        }).reset_index()
+        
+        total_clients = len(customer_stats)
+        if total_clients > 0:
+            returning_clients = len(customer_stats[customer_stats['fecha_emision'] > 1])
+            retention_rate = (returning_clients / total_clients) * 100
+            
+            customer_stats = customer_stats.sort_values('facturado', ascending=False)
+            top_20_rev = customer_stats.head(20)['facturado'].sum()
+            total_rev = df_2025['facturado'].sum()
+            pareto_share = (top_20_rev / total_rev) * 100 if total_rev > 0 else 0
+            
+            top_20_list = [{
+                "cliente": str(r['cliente']), 
+                "facturado": float(r['facturado']),
+                "tx_count": int(r['fecha_emision'])
+            } for _, r in customer_stats.head(20).iterrows()]
+            
+            customer_insights = {
+                "total_clients_2025": int(total_clients),
+                "retention_rate_percentage": float(retention_rate),
+                "pareto_top_20_share_percentage": float(pareto_share),
+                "top_20_clients": top_20_list
+            }
 
     # --- 8. Aging Analysis (Pending 2025) ---
-    # Using 'today' as user reference or max numeric date
-    ref_date = df['fecha_emision'].max()
-    
-    # Calculate days since emission for pending
-    df_2025_pending['days_since'] = (ref_date - df_2025_pending['fecha_emision']).dt.days
-    
-    aging_bins = {
-        "0-7 días": df_2025_pending[df_2025_pending['days_since'] <= 7]['pendiente'].sum(),
-        "8-30 días": df_2025_pending[(df_2025_pending['days_since'] > 7) & (df_2025_pending['days_since'] <= 30)]['pendiente'].sum(),
-        "31-60 días": df_2025_pending[(df_2025_pending['days_since'] > 30) & (df_2025_pending['days_since'] <= 60)]['pendiente'].sum(),
-        "60+ días": df_2025_pending[df_2025_pending['days_since'] > 60]['pendiente'].sum()
-    }
-    # Convert to float
-    aging_data = [{"range": k, "amount": float(v)} for k, v in aging_bins.items()]
+    aging_data = []
+    if not df_2025.empty:
+        df_2025_pending = df_2025[df_2025['pendiente'] > 0].copy()
+        if not df_2025_pending.empty:
+            ref_date = df['fecha_emision'].max()
+            df_2025_pending['days_since'] = (ref_date - df_2025_pending['fecha_emision']).dt.days
+            
+            aging_bins = {
+                "0-7 días": df_2025_pending[df_2025_pending['days_since'] <= 7]['pendiente'].sum(),
+                "8-30 días": df_2025_pending[(df_2025_pending['days_since'] > 7) & (df_2025_pending['days_since'] <= 30)]['pendiente'].sum(),
+                "31-60 días": df_2025_pending[(df_2025_pending['days_since'] > 30) & (df_2025_pending['days_since'] <= 60)]['pendiente'].sum(),
+                "60+ días": df_2025_pending[df_2025_pending['days_since'] > 60]['pendiente'].sum()
+            }
+            aging_data = [{"range": k, "amount": float(v)} for k, v in aging_bins.items()]
 
     # --- 9. Data Quality Scan ---
     total_records = len(df)
-    missing_payment = len(df[df['forma_pago_raw'].isnull() | (df['forma_pago_raw'] == '')])
-    missing_client = len(df[df['cliente'].isnull() | (df['cliente'] == '')])
+    missing_payment = 0
+    if 'forma_pago_raw' in df.columns:
+        missing_payment = len(df[df['forma_pago_raw'].isnull() | (df['forma_pago_raw'] == '')])
+    
+    missing_client = 0
+    if 'cliente' in df.columns:
+        missing_client = len(df[df['cliente'].isnull() | (df['cliente'] == '')])
+        
     anuladas_count = len(df[df['estado'] == 'ANULADO'])
     
     quality_metrics = {
@@ -272,7 +303,7 @@ def calculate_analytics(df: pd.DataFrame):
         "with_discounts_percentage": float((len(df[df['descuento'] > 0]) / total_records) * 100) if total_records > 0 else 0
     }
 
-    return {
+    result = {
         "kpis_by_year": kpis_by_year,
         "ytd_comparison": ytd_comparison,
         "monthly_seasonality": kpis_by_month_list,
@@ -281,12 +312,21 @@ def calculate_analytics(df: pd.DataFrame):
         "demanda_heatmap": demanda_heatmap,
         "payment_mix": payment_mix,
         "top_debtors_2025": top_debtors_list,
-        "customer_insights": {
-            "total_clients_2025": int(total_clients_2025),
-            "retention_rate_percentage": float(retention_rate),
-            "pareto_top_20_share_percentage": float(pareto_top_20_share),
-            "top_20_clients": top_20_clients_list
-        },
+        "customer_insights": customer_insights,
         "aging_analysis_2025": aging_data,
         "data_quality": quality_metrics
     }
+
+    # Helper to clean result for JSON (replaces NaN with None/0)
+    def sanitize(obj):
+        if isinstance(obj, dict):
+            return {k: sanitize(v) for k, v in obj.items()}
+        elif isinstance(obj, list):
+            return [sanitize(i) for i in obj]
+        elif isinstance(obj, float):
+            if np.isnan(obj) or np.isinf(obj):
+                return 0.0
+            return obj
+        return obj
+
+    return sanitize(result)
