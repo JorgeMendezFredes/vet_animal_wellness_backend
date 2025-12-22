@@ -82,6 +82,7 @@ def calculate_analytics(df: pd.DataFrame):
             "facturado": float(facturado),
             "pagado": float(r['pagado']),
             "pendiente": float(r['pendiente']),
+            "descuento": float(descuento),
             "ticket_prom": float(facturado / tx_count) if tx_count > 0 else 0,
             "desc_rate_percentage": float((descuento / gross) * 100) if gross > 0 else 0,
         }
@@ -130,6 +131,7 @@ def calculate_analytics(df: pd.DataFrame):
             "facturado": float(r['facturado']),
             "pagado": float(r['pagado']),
             "pendiente": float(r['pendiente']),
+            "descuento": float(r['descuento']),
             "tx_count": int(tx_count),
             "ticket_prom": float(r['facturado'] / tx_count) if tx_count > 0 else 0
         }
