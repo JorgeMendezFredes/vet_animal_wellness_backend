@@ -182,6 +182,7 @@ def calculate_analytics(df: pd.DataFrame):
     df_valid['payment_type'] = df_valid['forma_pago_raw'].apply(categorize_payment)
     
     payment_mix = []
+    years = sorted(df_valid['year'].unique().tolist())
     for y in years:
         df_y = df_valid[df_valid['year'] == y]
         total_y = df_y['facturado'].sum()
@@ -195,7 +196,7 @@ def calculate_analytics(df: pd.DataFrame):
         payment_mix.append(mix_dict)
 
     # --- 6. Top Debtors (2025) ---
-    df_2025_pending = df_2025[df_2025['pendiente'] > 0]
+    df_2025_pending = df_2025[df_2025['pendiente'] > 0].copy()
     top_debtors = df_2025_pending.groupby('cliente')['pendiente'].sum().reset_index().sort_values('pendiente', ascending=False).head(5)
     top_debtors_list = [{"cliente": str(r['cliente']), "pendiente": float(r['pendiente'])} for _, r in top_debtors.iterrows()]
 
