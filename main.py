@@ -1,7 +1,23 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from app.api.endpoints import dashboard
 
 app = FastAPI(title="Vet Animal Wellness API")
+
+# Configure CORS
+origins = [
+    "https://vetanimalwellness.cl",
+    "http://localhost:5173",
+    "http://localhost:4321", # Default Astro dev port
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"], # For simplicity in laboratory, we can use * or the list
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 app.include_router(dashboard.router, prefix="/api/dashboard", tags=["dashboard"])
 
