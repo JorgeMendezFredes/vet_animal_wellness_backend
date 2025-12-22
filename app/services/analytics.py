@@ -139,37 +139,53 @@ def calculate_analytics(df: pd.DataFrame):
             item["tipo"] = str(r['tipo'])
         kpis_by_month_list.append(item)
 
-    # --- 4. Day of Week & Hours (2025 Analysis) ---
-    df_2025 = df_valid[df_valid['year'] == 2025].copy()
-    
-    # DoW
+    # --- 4. Day of Week & Hours (Operational Analysis) ---
+    df_valid['dow_idx'] = df_valid['fecha_emision'].dt.dayofweek
     dow_map = {
         0: 'Lunes', 1: 'Martes', 2: 'Miércoles', 3: 'Jueves', 4: 'Viernes', 5: 'Sábado', 6: 'Domingo'
     }
-    df_2025['dow_idx'] = df_2025['fecha_emision'].dt.dayofweek
-    dow_stats = df_2025.groupby('dow_idx').agg({
+    
+    # 4a. DoW Stats for all available data in df_valid
+    dow_stats_all = df_valid.groupby('dow_idx').agg({
         'facturado': 'sum',
-        'fecha_emision': lambda x: x.dt.date.nunique()
+        'fecha_emision': ['count', lambda x: x.dt.date.nunique()]
     }).reset_index()
+    dow_stats_all.columns = ['dow_idx', 'facturado', 'tx_count', 'count_active_days']
     
-    # Rename and force type conversion
-    dow_stats = dow_stats.rename(columns={'fecha_emision': 'count_active_days'})
-    dow_stats['count_active_days'] = pd.to_numeric(dow_stats['count_active_days'])
-    
-    dow_stats['promedio_dia'] = dow_stats['facturado'] / dow_stats['count_active_days']
-    
-    dow_data = []
-    for _, row in dow_stats.iterrows():
-        dow_data.append({
+    dow_data_all = []
+    for _, row in dow_stats_all.iterrows():
+        dow_data_all.append({
             "day": dow_map.get(int(row['dow_idx']), "Unknown"),
-            "total_sales": float(row['facturado']),
-            "active_days": int(row['count_active_days']),
-            "avg_daily_sales": float(row['promedio_dia'])
+            "facturado": float(row['facturado']),
+            "tx_count": int(row['tx_count']),
+            "avg_daily_sales": float(row['facturado'] / row['count_active_days']) if row['count_active_days'] > 0 else 0
         })
 
-    # Hours
-    hourly_stats = df_2025.groupby('hour')['facturado'].sum().reset_index().sort_values('facturado', ascending=False).head(5)
-    top_hours = [{"hour": int(r['hour']), "facturado": float(r['facturado'])} for _, r in hourly_stats.iterrows()]
+    # 4b. Heatmap (Day x Hour)
+    heatmap_stats = df_valid.groupby(['dow_idx', 'hour']).agg({
+        'facturado': 'sum',
+        'fecha_emision': 'count'
+    }).reset_index()
+    
+    demanda_heatmap = []
+    for _, row in heatmap_stats.iterrows():
+        demanda_heatmap.append({
+            "day": dow_map.get(int(row['dow_idx'])),
+            "hour": int(row['hour']),
+            "facturado": float(row['facturado']),
+            "tx_count": int(row['fecha_emision'])
+        })
+
+    # 4c. Daily Trends (for Rolling Average)
+    daily_stats = df_valid.groupby(df_valid['fecha_emision'].dt.date).agg({
+        'facturado': 'sum',
+        'fecha_emision': 'count'
+    }).reset_index()
+    daily_stats = daily_stats.rename(columns={'fecha_emision': 'tx_count', 'fecha_emision_dt': 'date'})
+    daily_stats.columns = ['date', 'facturado', 'tx_count']
+    daily_stats['date'] = daily_stats['date'].astype(str)
+    
+    daily_trends = daily_stats.to_dict(orient='records')
 
     # --- 5. Payment Methods Mix ---
     # Assuming 'forma_pago_raw' needs simple categorization
@@ -198,6 +214,7 @@ def calculate_analytics(df: pd.DataFrame):
         payment_mix.append(mix_dict)
 
     # --- 6. Top Debtors (2025) ---
+    df_2025 = df_valid[df_valid['year'] == 2025].copy()
     df_2025_pending = df_2025[df_2025['pendiente'] > 0].copy()
     top_debtors = df_2025_pending.groupby('cliente')['pendiente'].sum().reset_index().sort_values('pendiente', ascending=False).head(5)
     top_debtors_list = [{"cliente": str(r['cliente']), "pendiente": float(r['pendiente'])} for _, r in top_debtors.iterrows()]
@@ -259,8 +276,9 @@ def calculate_analytics(df: pd.DataFrame):
         "kpis_by_year": kpis_by_year,
         "ytd_comparison": ytd_comparison,
         "monthly_seasonality": kpis_by_month_list,
-        "dow_analysis_2025": dow_data,
-        "top_hours_2025": top_hours,
+        "dow_analysis": dow_data_all,
+        "daily_trends": daily_trends,
+        "demanda_heatmap": demanda_heatmap,
         "payment_mix": payment_mix,
         "top_debtors_2025": top_debtors_list,
         "customer_insights": {
