@@ -192,8 +192,7 @@ def calculate_analytics(df: pd.DataFrame):
             "tx_count": int(row['total_tx'])
         })
 
-    # --- 5. Payment Methods Mix ---
-    # Assuming 'forma_pago_raw' needs simple categorization
+    # --- 5. Payment Methods Mix & Trends ---
     def categorize_payment(pago):
         p = str(pago).lower()
         if 'tarjeta' in p or 'transbank' in p or 'tbk' in p: return 'Tarjeta/POS'
@@ -202,29 +201,35 @@ def calculate_analytics(df: pd.DataFrame):
         if 'sin boleta' in p: return 'Sin Boleta'
         return 'Otros'
 
-    if 'forma_pago_raw' in df_valid.columns:
-        df_valid['payment_type'] = df_valid['forma_pago_raw'].apply(categorize_payment)
+    # Use original df to include ALL statuses (ANULADO, etc) for filtering
+    df_payment = df.copy()
+    if 'forma_pago_raw' in df_payment.columns:
+        df_payment['payment_type'] = df_payment['forma_pago_raw'].apply(categorize_payment)
     else:
-        df_valid['payment_type'] = 'Otros'
-    
-    # --- 5. Payment Methods Mix & Trends ---
-    # Categorize and aggregate by Year, Month, Type (Status), Tipo (Doc Type) and Payment Category
-    payment_stats = df_valid.groupby(['year', 'month', 'estado', 'tipo', 'payment_type']).agg(
+        df_payment['payment_type'] = 'Otros'
+
+    # Build group dims dynamically
+    pm_dims = ['year', 'month', 'payment_type']
+    if 'estado' in df_payment.columns: pm_dims.append('estado')
+    if 'tipo' in df_payment.columns: pm_dims.append('tipo')
+
+    payment_stats = df_payment.groupby(pm_dims).agg(
         amount=('facturado', 'sum'),
         count=('fecha_emision', 'count')
     ).reset_index()
 
     payment_mix_data = []
     for _, row in payment_stats.iterrows():
-        payment_mix_data.append({
+        item = {
             "year": int(row['year']),
             "month": int(row['month']),
-            "estado": str(row['estado']),
-            "tipo": str(row['tipo']),
             "type": str(row['payment_type']),
             "amount": float(row['amount']),
             "count": int(row['count'])
-        })
+        }
+        if 'estado' in row: item["estado"] = str(row['estado'])
+        if 'tipo' in row: item["tipo"] = str(row['tipo'])
+        payment_mix_data.append(item)
 
     # Legacy payment_mix for backward compatibility (Yearly percentage)
     payment_mix_legacy = []
