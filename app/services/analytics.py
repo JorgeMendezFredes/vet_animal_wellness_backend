@@ -207,19 +207,34 @@ def calculate_analytics(df: pd.DataFrame):
     else:
         df_valid['payment_type'] = 'Otros'
     
-    payment_mix = []
+    # --- 5. Payment Methods Mix & Trends ---
+    # Categorize and aggregate by Year, Month and Type
+    payment_stats = df_valid.groupby(['year', 'month', 'payment_type']).agg(
+        amount=('facturado', 'sum'),
+        count=('fecha_emision', 'count')
+    ).reset_index()
+
+    payment_mix_data = []
+    for _, row in payment_stats.iterrows():
+        payment_mix_data.append({
+            "year": int(row['year']),
+            "month": int(row['month']),
+            "type": str(row['payment_type']),
+            "amount": float(row['amount']),
+            "count": int(row['count'])
+        })
+
+    # Legacy payment_mix for backward compatibility (Yearly percentage)
+    payment_mix_legacy = []
     years = sorted(df_valid['year'].unique().tolist())
     for y in years:
         df_y = df_valid[df_valid['year'] == y]
         total_y = df_y['facturado'].sum()
         if total_y == 0: continue
-        
         mix_y = df_y.groupby('payment_type')['facturado'].sum().reset_index()
-        mix_y['percentage'] = (mix_y['facturado'] / total_y) * 100
-        
-        mix_dict = {row['payment_type']: float(row['percentage']) for _, row in mix_y.iterrows()}
+        mix_dict = {row['payment_type']: float((row['facturado'] / total_y) * 100) for _, row in mix_y.iterrows()}
         mix_dict['year'] = int(y)
-        payment_mix.append(mix_dict)
+        payment_mix_legacy.append(mix_dict)
 
     # --- 6. Top Debtors (2025) ---
     df_2025 = df_valid[df_valid['year'] == 2025].copy()
@@ -310,7 +325,8 @@ def calculate_analytics(df: pd.DataFrame):
         "dow_analysis": dow_data_all,
         "daily_trends": daily_trends,
         "demanda_heatmap": demanda_heatmap,
-        "payment_mix": payment_mix,
+        "payment_mix": payment_mix_legacy,
+        "payment_mix_data": payment_mix_data,
         "top_debtors_2025": top_debtors_list,
         "customer_insights": customer_insights,
         "aging_analysis_2025": aging_data,
