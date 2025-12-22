@@ -172,6 +172,36 @@ def calculate_analytics(df: pd.DataFrame):
     total_revenue_2025 = df_2025['facturado'].sum()
     pareto_top_20_share = (top_20_clients_revenue / total_revenue_2025) * 100 if total_revenue_2025 > 0 else 0
 
+    # --- 8. Aging Analysis (Pending 2025) ---
+    # Using 'today' as user reference or max numeric date
+    ref_date = df['fecha_emision'].max()
+    
+    # Calculate days since emission for pending
+    df_2025_pending['days_since'] = (ref_date - df_2025_pending['fecha_emision']).dt.days
+    
+    aging_bins = {
+        "0-7 días": df_2025_pending[df_2025_pending['days_since'] <= 7]['pendiente'].sum(),
+        "8-30 días": df_2025_pending[(df_2025_pending['days_since'] > 7) & (df_2025_pending['days_since'] <= 30)]['pendiente'].sum(),
+        "31-60 días": df_2025_pending[(df_2025_pending['days_since'] > 30) & (df_2025_pending['days_since'] <= 60)]['pendiente'].sum(),
+        "60+ días": df_2025_pending[df_2025_pending['days_since'] > 60]['pendiente'].sum()
+    }
+    # Convert to float
+    aging_data = [{"range": k, "amount": float(v)} for k, v in aging_bins.items()]
+
+    # --- 9. Data Quality Scan ---
+    total_records = len(df)
+    missing_payment = len(df[df['forma_pago_raw'].isnull() | (df['forma_pago_raw'] == '')])
+    missing_client = len(df[df['cliente'].isnull() | (df['cliente'] == '')])
+    anuladas_count = len(df[df['estado'] == 'ANULADO'])
+    
+    quality_metrics = {
+        "total_records": int(total_records),
+        "missing_payment_percentage": float((missing_payment / total_records) * 100) if total_records > 0 else 0,
+        "missing_client_percentage": float((missing_client / total_records) * 100) if total_records > 0 else 0,
+        "anuladas_percentage": float((anuladas_count / total_records) * 100) if total_records > 0 else 0,
+        "with_discounts_percentage": float((len(df[df['descuento'] > 0]) / total_records) * 100) if total_records > 0 else 0
+    }
+
     return {
         "kpis_by_year": kpis_by_year,
         "ytd_comparison": ytd_comparison,
@@ -184,5 +214,7 @@ def calculate_analytics(df: pd.DataFrame):
             "total_clients_2025": int(total_clients_2025),
             "retention_rate_percentage": float(retention_rate),
             "pareto_top_20_share_percentage": float(pareto_top_20_share)
-        }
+        },
+        "aging_analysis_2025": aging_data,
+        "data_quality": quality_metrics
     }
