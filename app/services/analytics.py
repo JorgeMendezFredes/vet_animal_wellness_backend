@@ -156,6 +156,22 @@ def calculate_analytics(df: pd.DataFrame):
     top_debtors = df_2025_pending.groupby('cliente')['pendiente'].sum().reset_index().sort_values('pendiente', ascending=False).head(5)
     top_debtors_list = [{"cliente": str(r['cliente']), "pendiente": float(r['pendiente'])} for _, r in top_debtors.iterrows()]
 
+    # --- 7. Customer Retention & Concentration (2025) ---
+    customer_stats = df_2025.groupby('cliente').agg({
+        'facturado': 'sum', 
+        'fecha_emision': 'count'
+    }).reset_index()
+    
+    total_clients_2025 = len(customer_stats)
+    returning_clients = len(customer_stats[customer_stats['fecha_emision'] > 1])
+    retention_rate = (returning_clients / total_clients_2025) * 100 if total_clients_2025 > 0 else 0
+    
+    # Pareto (Concentration)
+    customer_stats = customer_stats.sort_values('facturado', ascending=False)
+    top_20_clients_revenue = customer_stats.head(20)['facturado'].sum()
+    total_revenue_2025 = df_2025['facturado'].sum()
+    pareto_top_20_share = (top_20_clients_revenue / total_revenue_2025) * 100 if total_revenue_2025 > 0 else 0
+
     return {
         "kpis_by_year": kpis_by_year,
         "ytd_comparison": ytd_comparison,
@@ -163,5 +179,10 @@ def calculate_analytics(df: pd.DataFrame):
         "dow_analysis_2025": dow_data,
         "top_hours_2025": top_hours,
         "payment_mix": payment_mix,
-        "top_debtors_2025": top_debtors_list
+        "top_debtors_2025": top_debtors_list,
+        "customer_insights": {
+            "total_clients_2025": int(total_clients_2025),
+            "retention_rate_percentage": float(retention_rate),
+            "pareto_top_20_share_percentage": float(pareto_top_20_share)
+        }
     }
