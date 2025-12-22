@@ -208,8 +208,8 @@ def calculate_analytics(df: pd.DataFrame):
         df_valid['payment_type'] = 'Otros'
     
     # --- 5. Payment Methods Mix & Trends ---
-    # Categorize and aggregate by Year, Month and Type
-    payment_stats = df_valid.groupby(['year', 'month', 'payment_type']).agg(
+    # Categorize and aggregate by Year, Month, Type (Status), Tipo (Doc Type) and Payment Category
+    payment_stats = df_valid.groupby(['year', 'month', 'estado', 'tipo', 'payment_type']).agg(
         amount=('facturado', 'sum'),
         count=('fecha_emision', 'count')
     ).reset_index()
@@ -219,6 +219,8 @@ def calculate_analytics(df: pd.DataFrame):
         payment_mix_data.append({
             "year": int(row['year']),
             "month": int(row['month']),
+            "estado": str(row['estado']),
+            "tipo": str(row['tipo']),
             "type": str(row['payment_type']),
             "amount": float(row['amount']),
             "count": int(row['count'])
