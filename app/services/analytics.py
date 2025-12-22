@@ -46,6 +46,20 @@ def calculate_analytics(df: pd.DataFrame):
     # Filter out invalid dates if any
     df = df.dropna(subset=['fecha_emision'])
 
+    # Categorize Payment Type Early
+    def categorize_payment(pago):
+        p = str(pago).lower()
+        if 'tarjeta' in p or 'transbank' in p or 'tbk' in p: return 'Tarjeta/POS'
+        if 'transferencia' in p: return 'Transferencia'
+        if 'efectivo' in p: return 'Efectivo'
+        if 'sin boleta' in p: return 'Sin Boleta'
+        return 'Otros'
+
+    if 'forma_pago_raw' in df.columns:
+        df['payment_type'] = df['forma_pago_raw'].apply(categorize_payment)
+    else:
+        df['payment_type'] = 'Otros'
+
     # --- 1. KPIs per Year, Status & Tipo ---
     # Ensure columns exist
     if 'estado' not in df.columns:
@@ -193,27 +207,12 @@ def calculate_analytics(df: pd.DataFrame):
         })
 
     # --- 5. Payment Methods Mix & Trends ---
-    def categorize_payment(pago):
-        p = str(pago).lower()
-        if 'tarjeta' in p or 'transbank' in p or 'tbk' in p: return 'Tarjeta/POS'
-        if 'transferencia' in p: return 'Transferencia'
-        if 'efectivo' in p: return 'Efectivo'
-        if 'sin boleta' in p: return 'Sin Boleta'
-        return 'Otros'
-
-    # Use original df to include ALL statuses (ANULADO, etc) for filtering
-    df_payment = df.copy()
-    if 'forma_pago_raw' in df_payment.columns:
-        df_payment['payment_type'] = df_payment['forma_pago_raw'].apply(categorize_payment)
-    else:
-        df_payment['payment_type'] = 'Otros'
-
     # Build group dims dynamically
     pm_dims = ['year', 'month', 'payment_type']
-    if 'estado' in df_payment.columns: pm_dims.append('estado')
-    if 'tipo' in df_payment.columns: pm_dims.append('tipo')
+    if 'estado' in df.columns: pm_dims.append('estado')
+    if 'tipo' in df.columns: pm_dims.append('tipo')
 
-    payment_stats = df_payment.groupby(pm_dims).agg(
+    payment_stats = df.groupby(pm_dims).agg(
         amount=('facturado', 'sum'),
         count=('fecha_emision', 'count')
     ).reset_index()
