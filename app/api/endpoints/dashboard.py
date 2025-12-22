@@ -11,14 +11,29 @@ def get_dashboard_stats():
     """
     supabase = get_supabase()
     
-    # Fetch data (limiting to recent or all for now, depending on volume)
-    # For now, let's just get a count and sum of 'facturado' to verify connection
-    response = supabase.table('comprobantes').select("*").execute()
+    # Fetch all data effectively (handling default 1000 row limit)
+    all_rows = []
+    chunk_size = 1000
+    current_start = 0
     
-    if not response.data:
+    while True:
+        response = supabase.table('comprobantes').select("*").range(current_start, current_start + chunk_size - 1).execute()
+        rows = response.data
+        if not rows:
+            break
+        all_rows.extend(rows)
+        if len(rows) < chunk_size:
+            break
+        current_start += chunk_size
+        
+        # Safety break for massive datasets to avoid timeout, though 100k is fine given logic
+        if len(all_rows) > 50000: 
+            break
+    
+    if not all_rows:
         return {"message": "No data found"}
         
-    df = pd.DataFrame(response.data)
+    df = pd.DataFrame(all_rows)
     
     # Calculate advanced analytics
     from app.services.analytics import calculate_analytics
