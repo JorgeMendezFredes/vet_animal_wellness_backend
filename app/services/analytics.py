@@ -100,7 +100,7 @@ def get_kpis_summary(df: pd.DataFrame, df_full: pd.DataFrame) -> dict:
         "discount_percent": float(df['descuento'].sum() / (df['facturado'].sum() + df['descuento'].sum()) * 100) if (df['facturado'].sum() + df['descuento'].sum()) > 0 else 0.0
     }
 
-    # 2. Historical & Seasonality (Full Data)
+    # 2. Historical & Seasonality (Full Data for context/filters)
     monthly_stats = df_full.groupby(['year', 'month', 'estado', 'tipo']).agg({
         'facturado': 'sum', 'pagado': 'sum', 'pendiente': 'sum', 'descuento': 'sum', 'fecha_emision': 'count', 'has_discount': 'sum'
     }).reset_index()
