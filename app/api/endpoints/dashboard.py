@@ -46,28 +46,40 @@ def get_dashboard_stats(
     """
     global _df_cache, _last_cache_time
     
-    current_time = time.time()
+    import traceback
     
-    if _df_cache is None or (current_time - _last_cache_time) > 600:
-        try:
-            _df_cache = fetch_all_comprobantes()
-            _last_cache_time = current_time
-        except Exception as e:
-            if _df_cache is None: _df_cache = pd.DataFrame()
+    try:
+        current_time = time.time()
+        
+        if _df_cache is None or (current_time - _last_cache_time) > 600:
+            try:
+                _df_cache = fetch_all_comprobantes()
+                _last_cache_time = current_time
+            except Exception as e:
+                print(f"Error fetching data: {e}")
+                # If fetch fails, try to use existing cache or return error if empty
+                if _df_cache is None: 
+                    return {"error": f"Failed to fetch data from Supabase: {str(e)}"}
 
-    if _df_cache.empty:
-        return {"error": "No data available"}
+        if _df_cache.empty:
+            return {"error": "No data available"}
 
-    # Prepare filters dict
-    filters = {
-        "year": year,
-        "month": month,
-        "status": status,
-        "tipo": tipo,
-        "search": search
-    }
+        # Prepare filters dict
+        filters = {
+            "year": year,
+            "month": month,
+            "status": status,
+            "tipo": tipo,
+            "search": search
+        }
 
-    return analytics.calculate_analytics(_df_cache, filters=filters)
+        return analytics.calculate_analytics(_df_cache, filters=filters)
+    except Exception as e:
+        return {
+            "error": "Internal Server Error",
+            "detail": str(e),
+            "traceback": traceback.format_exc()
+        }
 
 @router.get("/client_search")
 def search_client_endpoint(query: str):
