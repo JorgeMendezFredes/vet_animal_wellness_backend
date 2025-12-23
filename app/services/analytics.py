@@ -126,6 +126,26 @@ def calculate_analytics(df: pd.DataFrame, filters: dict = None):
             "tipo": str(r['tipo'])
         })
 
+    # Weekly/Yearly aggregation for kpis_by_year (Required by frontend)
+    group_dims_year = ['year', 'estado', 'tipo']
+    yearly_stats = df_full.groupby(group_dims_year).agg({
+        'facturado': 'sum', 'pagado': 'sum', 'pendiente': 'sum', 'descuento': 'sum', 'fecha_emision': 'count'
+    }).reset_index()
+
+    kpis_by_year = []
+    for _, r in yearly_stats.iterrows():
+        kpis_by_year.append({
+            "year": int(r['year']),
+            "estado": str(r['estado']),
+            "tipo": str(r['tipo']),
+            "facturado": float(r['facturado']),
+            "pagado": float(r['pagado']),
+            "pendiente": float(r['pendiente']),
+            "descuento": float(r['descuento']),
+            "tx_count": int(r['fecha_emision'])
+        })
+
+
     # --- 3. Operational Analysis (DoW, Heatmap, Daily) ---
     dow_map = {0:'Lunes', 1:'Martes', 2:'Miércoles', 3:'Jueves', 4:'Viernes', 5:'Sábado', 6:'Domingo'}
     
@@ -187,7 +207,7 @@ def calculate_analytics(df: pd.DataFrame, filters: dict = None):
             pending_invoices.append({"fecha_emision": r['fecha_emision'].strftime('%Y-%m-%d'), "comprobante": str(r['comprobante']), "cliente": str(r['cliente']), "pendiente": float(r['pendiente']), "facturado": float(r['facturado']), "days_overdue": int((current_time - r['fecha_emision']).days)})
 
     result = {
-        "summary": summary_kpis, "monthly_seasonality": monthly_seasonality, "dow_analysis": dow_analysis, "daily_trends": daily_trends, "demanda_heatmap": demanda_heatmap,
+        "summary": summary_kpis, "kpis_by_year": kpis_by_year, "monthly_seasonality": monthly_seasonality, "dow_analysis": dow_analysis, "daily_trends": daily_trends, "demanda_heatmap": demanda_heatmap,
         "payment_mix_data": payment_mix_data, "customer_insights": customer_insights, "aging_analysis": aging_data, "data_quality": quality, "drilldown_data": drilldown_dict,
         "pending_invoices": pending_invoices,
         "discounts_analysis": {
