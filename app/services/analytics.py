@@ -31,6 +31,9 @@ def preprocess_df(df: pd.DataFrame) -> pd.DataFrame:
     # Ensure fecha_emision is datetime
     if 'fecha_emision' in df.columns:
         df['fecha_emision'] = pd.to_datetime(df['fecha_emision'], errors='coerce')
+        # Fix: Ensure timezone-naive to avoid "Cannot subtract tz-naive and tz-aware" errors
+        if df['fecha_emision'].dt.tz is not None:
+            df['fecha_emision'] = df['fecha_emision'].dt.tz_localize(None)
         df = df.dropna(subset=['fecha_emision'])
     else:
         # Fallback if column is totally missing
