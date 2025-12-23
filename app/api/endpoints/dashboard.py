@@ -19,7 +19,11 @@ def fetch_all_comprobantes():
     current_start = 0
     
     while True:
-        response = supabase.table('comprobantes').select("*").range(current_start, current_start + chunk_size - 1).execute()
+        response = supabase.table('comprobantes') \
+            .select("*") \
+            .eq("is_active", True) \
+            .range(current_start, current_start + chunk_size - 1) \
+            .execute()
         rows = response.data
         if not rows:
             break
