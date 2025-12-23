@@ -1,17 +1,17 @@
 from fastapi import APIRouter, HTTPException
 from app.db.supabase import get_supabase
+from app.services import analytics
 import pandas as pd
+import time
 
 router = APIRouter()
 
-@router.get("/stats")
-def get_dashboard_stats():
-    """
-    Get basic dashboard statistics from 'comprobantes' table.
-    """
+# Simple in-memory cache
+_df_cache = None
+_last_cache_time = 0
+
+def fetch_all_comprobantes():
     supabase = get_supabase()
-    
-    # Fetch all data effectively (handling default 1000 row limit)
     all_rows = []
     chunk_size = 1000
     current_start = 0
@@ -26,21 +26,60 @@ def get_dashboard_stats():
             break
         current_start += chunk_size
         
-        # Safety break for massive datasets to avoid timeout, though 100k is fine given logic
+        # Safety break
         if len(all_rows) > 50000: 
             break
-    
-    if not all_rows:
-        return {"message": "No data found"}
-        
-    df = pd.DataFrame(all_rows)
-    print("DEBUG - Columns in df:", df.columns.tolist())
-    if not df.empty:
-        print("DEBUG - Sample 'estado' values:", df['estado'].unique().tolist() if 'estado' in df.columns else "No 'estado' col")
-        print("DEBUG - Sample 'tipo' values:", df['tipo'].unique().tolist() if 'tipo' in df.columns else "No 'tipo' col")
-    
-    # Calculate advanced analytics
-    from app.services.analytics import calculate_analytics
-    stats = calculate_analytics(df)
+            
+    return pd.DataFrame(all_rows)
 
-    return stats
+@router.get("/stats")
+def get_dashboard_stats(
+    year: int = 0, 
+    month: int = 0, 
+    status: str = 'all', 
+    tipo: str = 'all', 
+    search: str = ''
+):
+    """
+    Returns aggregated KPIs for the dashboard.
+    Uses in-memory caching and applies server-side filters.
+    """
+    global _df_cache, _last_cache_time
+    
+    current_time = time.time()
+    
+    if _df_cache is None or (current_time - _last_cache_time) > 600:
+        try:
+            _df_cache = fetch_all_comprobantes()
+            _last_cache_time = current_time
+        except Exception as e:
+            if _df_cache is None: _df_cache = pd.DataFrame()
+
+    if _df_cache.empty:
+        return {"error": "No data available"}
+
+    # Prepare filters dict
+    filters = {
+        "year": year,
+        "month": month,
+        "status": status,
+        "tipo": tipo,
+        "search": search
+    }
+
+    return analytics.calculate_analytics(_df_cache, filters=filters)
+
+@router.get("/client_search")
+def search_client_endpoint(query: str):
+    """
+    Endpoint to search for a specific client's history.
+    """
+    global _df_cache
+    if _df_cache is None or _df_cache.empty:
+        # Try to load if empty
+        try:
+             _df_cache = fetch_all_comprobantes()
+        except:
+             return []
+
+    return analytics.search_client_history(_df_cache, query)
