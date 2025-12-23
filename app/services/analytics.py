@@ -88,7 +88,10 @@ def calculate_analytics(df: pd.DataFrame, filters: dict = None):
         if filters.get('month') and filters['month'] != 0:
             df = df[df['month'] == filters['month']]
         if filters.get('status') and filters['status'] != 'all':
-            df = df[df['estado'] == filters['status']]
+            if filters['status'] == 'VIGENTE':
+                df = df[df['estado'] != 'ANULADO']
+            else:
+                df = df[df['estado'] == filters['status']]
         if filters.get('tipo') and filters['tipo'] != 'all':
             df = df[df['tipo'] == filters['tipo']]
         if filters.get('search'):
