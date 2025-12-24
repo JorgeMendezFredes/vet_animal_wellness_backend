@@ -219,7 +219,7 @@ def get_transactions(df: pd.DataFrame) -> dict:
     """Returns drilldown_data and pending_invoices (Heavy payload)."""
     
     # Drilldown (Last 5000)
-    drilldown = df.sort_values('fecha_emision', ascending=False).head(5000)
+    drilldown = df.sort_values('fecha_emision', ascending=False).head(20000)
     cols = ['fecha_emision', 'comprobante', 'cliente', 'facturado', 'pagado', 'pendiente', 'descuento', 'estado', 'payment_type']
     drilldown_data = drilldown[cols].copy()
     drilldown_data['fecha_emision'] = drilldown_data['fecha_emision'].dt.strftime('%Y-%m-%d %H:%M')
