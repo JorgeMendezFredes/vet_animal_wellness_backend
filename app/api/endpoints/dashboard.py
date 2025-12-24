@@ -31,8 +31,6 @@ def fetch_all_comprobantes():
         if len(rows) < chunk_size:
             break
         current_start += chunk_size
-        if len(all_rows) > 50000: 
-            break
             
     return pd.DataFrame(all_rows)
 

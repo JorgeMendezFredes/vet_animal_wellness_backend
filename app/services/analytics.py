@@ -34,8 +34,17 @@ def preprocess_df(df: pd.DataFrame) -> pd.DataFrame:
     else:
         df['fecha_emision'] = pd.Timestamp.now()
 
-    df['year'] = df['fecha_emision'].dt.year
-    df['month'] = df['fecha_emision'].dt.month
+    # Determine Year and Month (Prefer source_year/source_month if available for parity with Golden Tests)
+    if 'source_year' in df.columns:
+        df['year'] = pd.to_numeric(df['source_year'], errors='coerce').fillna(df['fecha_emision'].dt.year).astype(int)
+    else:
+        df['year'] = df['fecha_emision'].dt.year
+
+    if 'source_month' in df.columns:
+        df['month'] = pd.to_numeric(df['source_month'], errors='coerce').fillna(df['fecha_emision'].dt.month).astype(int)
+    else:
+        df['month'] = df['fecha_emision'].dt.month
+    
     df['day_name'] = df['fecha_emision'].dt.day_name()
     df['hour'] = df['fecha_emision'].dt.hour
     
@@ -218,8 +227,8 @@ def get_insights(df: pd.DataFrame, df_full: pd.DataFrame) -> dict:
 def get_transactions(df: pd.DataFrame) -> dict:
     """Returns drilldown_data and pending_invoices (Heavy payload)."""
     
-    # Drilldown (Last 5000)
-    drilldown = df.sort_values('fecha_emision', ascending=False).head(20000)
+    # Drilldown (No limits)
+    drilldown = df.sort_values('fecha_emision', ascending=False)
     cols = ['fecha_emision', 'comprobante', 'cliente', 'facturado', 'pagado', 'pendiente', 'descuento', 'estado', 'payment_type']
     drilldown_data = drilldown[cols].copy()
     drilldown_data['fecha_emision'] = drilldown_data['fecha_emision'].dt.strftime('%Y-%m-%d %H:%M')
@@ -229,7 +238,7 @@ def get_transactions(df: pd.DataFrame) -> dict:
     current_time = pd.Timestamp.now()
     df_pending = df[(df['estado']!='ANULADO') & (df['pendiente'] > 0.0)].copy()
     pending_invoices = []
-    for _, r in df_pending.sort_values('fecha_emision', ascending=True).head(2000).iterrows():
+    for _, r in df_pending.sort_values('fecha_emision', ascending=True).iterrows():
         pending_invoices.append({
             "fecha_emision": r['fecha_emision'].strftime('%Y-%m-%d'), 
             "comprobante": str(r['comprobante']), 
