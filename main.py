@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api.endpoints import dashboard
+from app.api.endpoints import dashboard, dashboard_golden
 
 app = FastAPI(title="Vet Animal Wellness API")
 
@@ -20,6 +20,7 @@ app.add_middleware(
 )
 
 app.include_router(dashboard.router, prefix="/api/dashboard", tags=["dashboard"])
+app.include_router(dashboard_golden.router, prefix="/api/dashboard", tags=["dashboard-golden"])
 
 @app.get("/")
 def read_root():
