@@ -167,12 +167,12 @@ def get_insights(df: pd.DataFrame, df_full: pd.DataFrame) -> dict:
         "top_20_clients": [{"cliente": str(r['cliente']), "facturado": float(r['f']), "tx_count": int(r['c'])} for _, r in top_20.iterrows()]
     }
 
-    # Data Quality (df_full)
+    # Data Quality (Filtered Data to respect dashboard controls)
     quality = {
-        "total_records": len(df_full),
-        "missing_payment_pct": float(df_full['forma_pago_raw'].isna().sum()/len(df_full)*100) if 'forma_pago_raw' in df_full.columns and len(df_full) > 0 else 0.0,
-        "missing_client_pct": float(df_full['cliente'].isna().sum()/len(df_full)*100) if len(df_full)>0 else 0.0,
-        "anuladas_pct": float(len(df_full[df_full['estado']=='ANULADO'])/len(df_full)*100) if len(df_full)>0 else 0.0
+        "total_records": len(df),
+        "missing_payment_pct": float(df['forma_pago_raw'].isna().sum()/len(df)*100) if 'forma_pago_raw' in df.columns and len(df) > 0 else 0.0,
+        "missing_client_pct": float(df['cliente'].isna().sum()/len(df)*100) if len(df)>0 else 0.0,
+        "anuladas_pct": float(len(df[df['estado']=='ANULADO'])/len(df)*100) if len(df)>0 else 0.0
     }
 
     # Aging Analysis
