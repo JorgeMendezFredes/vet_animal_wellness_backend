@@ -139,8 +139,15 @@ def get_kpis_summary(df: pd.DataFrame, df_full: pd.DataFrame) -> dict:
     dow_analysis = [{"day": dow_map[int(r['dow_idx'])], "facturado": float(r['f']), "tx_count": int(r['c']), "avg_daily_sales": float(r['f']/r['d']) if r['d']>0 else 0.0} for _, r in dow_stats.iterrows()]
 
     # Heatmap
-    heatmap = df_valid.groupby(['dow_idx', 'hour']).agg(f=('facturado', 'sum'), c=('fecha_emision', 'count')).reset_index()
-    demanda_heatmap = [{"day": dow_map[int(r['dow_idx'])], "hour": int(r['hour']), "facturado": float(r['f']), "tx_count": int(r['c'])} for _, r in heatmap.iterrows()]
+    # Check for Time Entropy: If > 90% of transactions are at hour 0, we assume time data is missing/synthetic.
+    time_counts = df_valid['hour'].value_counts(normalize=True)
+    is_time_synthetic = not time_counts.empty and time_counts.get(0, 0) > 0.90
+
+    if is_time_synthetic:
+        demanda_heatmap = []
+    else:
+        heatmap = df_valid.groupby(['dow_idx', 'hour']).agg(f=('facturado', 'sum'), c=('fecha_emision', 'count')).reset_index()
+        demanda_heatmap = [{"day": dow_map[int(r['dow_idx'])], "hour": int(r['hour']), "facturado": float(r['f']), "tx_count": int(r['c'])} for _, r in heatmap.iterrows()]
 
     # Daily Trends
     daily_stats = df_valid.groupby(df_valid['fecha_emision'].dt.date).agg(f=('facturado', 'sum'), c=('fecha_emision', 'count')).reset_index()
